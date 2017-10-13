@@ -353,7 +353,7 @@ def random_data_from_equation(equation, N, beta, mu=None, sigma=None):
     
     `mu` and `sigma` are currently not used
     """
-    lhs, rhs = parse_equation(eqn)
+    lhs, rhs = parse_equation(equation)
     rhs_variables = independent_vars(lhs, rhs)
     indep_vars = independent_vars(lhs, rhs)
     indep_elements = [el for el in rhs if el.variable in indep_vars]
@@ -547,13 +547,15 @@ def create_dependent_variables(lhs_element, rhs_elements,
         rows.append(row)
     return dependent_data, pd.DataFrame(rows)
 
-np.random.seed(0)
-N = dict(i=4, j=4, t=list(range(2000, 2010)))
-eqn = 'y_ijt ~ lag[1:2](y_ijt) + lag[0:1](x_ijt) + z_i + alpha_j'
-beta = [0.6, 0.2, 1, 1, 0.1, 0.5]
-df = random_data_from_equation(eqn, N=N, beta=beta)
+example_eqn = 'y_ijt ~ lag[1:2](y_ijt) + lag[0:1](x_ijt) + z_i + alpha_j'
+example_N = dict(i=4, j=4, t=list(range(2000, 2010)))
+example_beta = [0.6, 0.2, 1, 1, 0.1, 0.5]
 
-def a_test():
+if __name__ == '__main__':
+    np.random.seed(0)
+    df = random_data_from_equation(eqn, N=N, beta=beta)
+
+def _a_test():
     levels = {}
     levels['i'] = ['a', 'b']
     levels['t'] = [1,2,3]
