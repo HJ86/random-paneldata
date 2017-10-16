@@ -2,6 +2,29 @@
 panel_data.py
 
 Create random panel data sets according to a data generating process specified in equation form, with dimensions specified either by length, in which case the dimension levels are randomly generated, or with specific levels.
+
+>>> import numpy as np; np.random.seed(0)
+>>> equation = "y_it ~ lag(y_it) + lag[0:2](x_it) + alpha_i"
+>>> N = dict(i=5, t=range(2000, 2010))
+>>> beta = [0.8, 0.6, 0.4, 0.2, 0.1]
+>>> panel_data.random_data_from_equation(equation, N, beta).head(15)
+                 y_it   alpha_i  lag(x_it)  lag(x_it)2  lag(y_it)      x_it
+i      t
+mpvadd 2000  0.284061  0.177426        NaN         NaN        NaN  0.443863
+       2001  0.622741  0.177426   0.443863         NaN   0.284061  0.333674
+       2002  1.634625  0.177426   0.333674    0.443863   0.622741  1.494079
+       2003  1.866714  0.177426   1.494079    0.333674   1.634625 -0.205158
+       2004  1.915707  0.177426  -0.205158    1.494079   1.866714  0.313068
+       2005  1.122046  0.177426   0.313068   -0.205158   1.915707 -0.854096
+       2006 -0.895439  0.177426  -0.854096    0.313068   1.122046 -2.552990
+       2007 -1.498452  0.177426  -2.552990   -0.854096  -0.895439  0.653619
+       2008 -0.911508  0.177426   0.653619   -2.552990  -1.498452  0.864436
+       2009 -0.680265  0.177426   0.864436    0.653619  -0.911508 -0.742165
+hjtvse 2000  1.321675 -0.401781        NaN         NaN        NaN  2.269755
+       2001  1.052444 -0.401781   2.269755         NaN   1.321675 -1.454366
+       2002  0.701437 -0.401781  -1.454366    2.269755   1.052444  0.045759
+       2003  0.136091 -0.401781   0.045759   -1.454366   0.701437 -0.187184
+       2004  0.922641 -0.401781  -0.187184    0.045759   0.136091  1.532779
 """
 
 import numpy as np
@@ -11,35 +34,63 @@ import string
 import itertools
 
 class Variable:
-    def __init__(self, name, indices):
+    """
+    A Variable, like x_ij, with a name and an optional list of
+    indices
+    >>> x = Variable('x', 'ij')
+    >>> print(x)
+    x_ij
+    >>> y = Variable('y')
+    >>> y
+    y
+    """
+    def __init__(self, name, indices=None):
         self.name = name
         self.indices = indices
         
     def __repr__(self):
-        if len(self.indices) == 0:
+        if not self.indices:
             return self.name
         return "_".join((self.name, "".join(self.indices)))
 
 class Operator:
-    def __init__(self, name, argument, params):
+    """
+    An Operator, like lag(.) or diff[2](.) or lag[0:2](.)
+    >>> print(Operator('lag', 'y'))
+    lag(y)
+    >>> print(Operator('diff', 'x', 2))
+    diff[2](x)
+    >>> print(Operator('lag', 'z', '0:2'))
+    lag[0:2](z)
+    """
+    def __init__(self, name, argument, params=None):
         self.name = name
         self.argument = argument
         self.params = params
         
     def __repr__(self):
-        if len(self.params) == 0:
+        if not self.params:
             return "{0}({1})".format(self.name, self.argument)
         else:
             return "{0}[{1}]({2})".format(self.name,
                                          self.params, self.argument)
 
 class EquationElement:
-    def __init__(self, variable, operators):
+    """
+    An element of an additive equation, such as lag[2](y_ij). It consists
+    of a variable and an optioanl list of associated operators.
+
+    >>> var = Variable('y', 'ij')
+    >>> op = Operator('lag', var, 2)
+    >>> print(EquationElement(var, [op]))
+    lag[2](y_ij)
+    """
+    def __init__(self, variable, operators=None):
         self.variable = variable
         self.operators = operators
 
     def __repr__(self):
-        # TODO: Check this works for nested operators!
+        # TODO: This doesn't work for nested operators!
         if len(self.operators) == 0:
             return str(self.variable)
         return str(self.operators[0])
@@ -49,6 +100,10 @@ def _extract_element(op, names=[]):
     Extract an EquationElement and its operators from within
     a possibly nested set of Operators   
     """
+    # TODO: This seems a bit circular: we're creating EquationElements
+    #       with variables inside, then extracting the variables out of them
+    #       Is that really necessary?
+    # TODO: What is `names`? What the hell is this function actually for?
     try:
         # Recurse if `op` looks like an Operator
         return _extract_element(op.argument, [op] + names)
@@ -153,8 +208,14 @@ def _tuples_to_columns(tuples, names):
     >>> x = [('a', 'c'), ('b', 'd')]
     >>> _tuples_to_columns(x, ('A', 'B'))
     {'A': ('a', 'b'), 'B': ('c', 'd')}
+    >>> x = ['a', 'b', 'c']
+    >>> _tuples_to_columns(x, 'i')
+    {'i': ('a', 'b', 'c')}
     """
     out = {}
+    if len(names) == 1:
+        out[names[0]] = tuples
+        return out
     for i, x in enumerate(zip(*tuples)):
         out[names[i]] = x
     return out
@@ -220,8 +281,11 @@ def levels_and_data_to_data_frame(levels, data):
     index_columns = _tuples_to_columns(index, names=level_names)
 
     columns = _data_columns(assigned_data, index_columns)
-    multiindex = pd.MultiIndex.from_tuples(index, names=level_names)
-    return pd.DataFrame(columns, index=multiindex)     
+    if len(level_names) > 1:
+        index = pd.MultiIndex.from_tuples(index, names=level_names)
+    else:
+        index = pd.Index(index, name=level_names[0])
+    return pd.DataFrame(columns, index=index)     
 
 
 def _multiply_list_elements(l, start=1):
@@ -482,6 +546,8 @@ def create_dependent_variables(lhs_element, rhs_elements,
     Generate the data associated with each EquationElement in
     `dependent_elements`, using the data from the independent variables
     and the various multipliers in `beta`.
+
+    TODO: This function is terrible. It could do with a complete re-write.
     """
     # I think this has to happen row-by-row because of the possibility
     # of a dependence of y_it on y_i(t-1)
@@ -507,6 +573,7 @@ def create_dependent_variables(lhs_element, rhs_elements,
                             lagged_index = []
                             for i, idx_name in enumerate(dependent_data.index.names):
                                 idx_value = idx[i]
+                                # TODO: How do we know that the time index is called `t`??
                                 if idx_name == 't':
                                     lagged_index.append(idx_value - param)
                                 else:
